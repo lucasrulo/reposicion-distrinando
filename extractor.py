@@ -141,7 +141,6 @@ Q_VARIANTS_MIN = """
         inventoryLevels { edges { node {
           id
           item { id }
-          location { id name }
           quantities(names: ["available", "on_hand"]) { name quantity }
         } } }
       }
@@ -311,7 +310,7 @@ def parsear_stock(objs, marca_tienda, vendors_map, store_url):
         item_id = (n.get("item") or {}).get("id") or n.get("__parentId")
         q = {x["name"]: x["quantity"] for x in n.get("quantities", [])}
         por_item.setdefault(item_id, []).append({
-            "ubicacion": (n.get("location") or {}).get("name", "Todas las ubicaciones"),
+            "ubicacion": (n.get("location") or {}).get("name", "Tienda online"),
             "disponible": q.get("available", 0),
             "entrante": q.get("incoming", 0),
             "comprometido": q.get("committed", 0),
@@ -391,7 +390,7 @@ def main():
             scopes = {x["handle"] for x in cli.gql(Q_SCOPES)["currentAppInstallation"]["accessScopes"]}
             scopes |= {x.replace("write_", "read_") for x in scopes}
             print(f"  🔑 {tienda}: permisos -> {', '.join(sorted(x for x in scopes if x.startswith('read_')))}")
-            faltan = [x for x in ("read_orders", "read_products", "read_inventory", "read_locations") if x not in scopes]
+            faltan = [x for x in ("read_orders", "read_products", "read_inventory") if x not in scopes]
             if faltan:
                 print(f"::warning::{tienda}: a la app le faltan permisos {faltan}")
         except Exception as e:
@@ -406,11 +405,9 @@ def main():
 
         # --- STOCK (imprescindible) ---
         ds = None
-        intentos_stock = [("completa", Q_VARIANTS), ("sin ubicaciones", Q_VARIANTS_SIN_UBIC),
+        # Una sola ubicación por tienda -> no pedimos ubicaciones (evita necesitar read_locations)
+        intentos_stock = [("completa", Q_VARIANTS_SIN_UBIC),
                           ("sin costo/imagen", Q_VARIANTS_MIN % "price"), ("mínima", Q_VARIANTS_MIN % "")]
-        if scopes is not None and "read_locations" not in scopes:
-            print(f"::warning::{tienda}: sin permiso read_locations -> stock total, sin detalle por ubicación")
-            intentos_stock = [("sin ubicaciones", Q_VARIANTS_SIN_UBIC)]
         for nombre_q, q in intentos_stock:
             try:
                 ds = parsear_stock(cli.bulk(q), tienda, vmap, cli.store_url)
