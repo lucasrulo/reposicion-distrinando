@@ -114,8 +114,76 @@ query Poll($id: ID!) {
 }
 """
 
+# Versiones mínimas (si la app no tiene algún permiso para los campos "lindos")
+Q_ORDERS_MIN = """
+{
+  orders(query: "created_at:>=%s") {
+    edges { node {
+      id createdAt cancelledAt
+      lineItems { edges { node {
+        id sku quantity currentQuantity
+        originalUnitPriceSet { shopMoney { amount } }
+      } } }
+    } }
+  }
+}
+"""
+
+Q_VARIANTS_MIN = """
+{
+  productVariants {
+    edges { node {
+      id sku title %s
+      selectedOptions { name value }
+      product { id title handle vendor productType status createdAt }
+      inventoryItem {
+        id tracked
+        inventoryLevels { edges { node {
+          id
+          item { id }
+          location { id name }
+          quantities(names: ["available", "on_hand"]) { name quantity }
+        } } }
+      }
+    } }
+  }
+}
+"""
+
+Q_VARIANTS_SIN_UBIC = """
+{
+  productVariants {
+    edges { node {
+      id sku title price compareAtPrice
+      selectedOptions { name value }
+      product {
+        id title handle vendor productType status createdAt
+        featuredMedia { preview { image { url } } }
+      }
+      inventoryItem {
+        id tracked
+        unitCost { amount }
+        inventoryLevels { edges { node {
+          id
+          item { id }
+          quantities(names: ["available", "incoming", "committed", "on_hand"]) { name quantity }
+        } } }
+      }
+    } }
+  }
+}
+"""
+
+Q_SCOPES = "{ currentAppInstallation { accessScopes { handle } } }"
+
 Q_CURRENT = "{ currentBulkOperation { id status } }"
 M_CANCEL = "mutation($id: ID!) { bulkOperationCancel(id: $id) { userErrors { message } } }"
+
+
+class BulkError(RuntimeError):
+    def __init__(self, status, code):
+        super().__init__(f"bulk {status} ({code})")
+        self.code = code
 
 
 # ==============================================================================
@@ -166,7 +234,7 @@ class Shopify:
             if st == "COMPLETED":
                 break
             if st in ("FAILED", "CANCELED", "EXPIRED"):
-                raise RuntimeError(f"{self.nombre}: bulk {st} ({op.get('errorCode')})")
+                raise BulkError(st, op.get("errorCode"))
             if time.time() - t0 > timeout_s:
                 raise RuntimeError(f"{self.nombre}: bulk timeout")
             time.sleep(espera)
@@ -243,7 +311,7 @@ def parsear_stock(objs, marca_tienda, vendors_map, store_url):
         item_id = (n.get("item") or {}).get("id") or n.get("__parentId")
         q = {x["name"]: x["quantity"] for x in n.get("quantities", [])}
         por_item.setdefault(item_id, []).append({
-            "ubicacion": n["location"]["name"],
+            "ubicacion": (n.get("location") or {}).get("name", "Todas las ubicaciones"),
             "disponible": q.get("available", 0),
             "entrante": q.get("incoming", 0),
             "comprometido": q.get("committed", 0),
@@ -313,31 +381,97 @@ def main():
         if not token:
             estado[tienda] = "sin token"
             print(f"  ⏭️  {tienda}: sin token")
+            print(f"::warning::{tienda}: falta el secret {cfg['secret']} (o está vacío)")
             continue
         cli = Shopify(tienda, cfg["url"], token)
         vmap = cfg.get("vendors", {})
+        t = time.time()
+        # --- permisos de la app ---
         try:
-            t = time.time()
-            dv = parsear_ventas(cli.bulk(Q_ORDERS % desde), tienda, vmap)
-            ds = parsear_stock(cli.bulk(Q_VARIANTS), tienda, vmap, cli.store_url)
-            ventas.append(dv)
-            stock.append(ds)
-            estado[tienda] = "ok"
-            print(f"  ✅ {tienda}: {int(dv['unidades'].sum()) if not dv.empty else 0} uds vendidas, "
-                  f"{ds['sku'].nunique() if not ds.empty else 0} SKUs ({time.time() - t:.0f}s)")
+            scopes = {x["handle"] for x in cli.gql(Q_SCOPES)["currentAppInstallation"]["accessScopes"]}
+            scopes |= {x.replace("write_", "read_") for x in scopes}
+            print(f"  🔑 {tienda}: permisos -> {', '.join(sorted(x for x in scopes if x.startswith('read_')))}")
+            faltan = [x for x in ("read_orders", "read_products", "read_inventory", "read_locations") if x not in scopes]
+            if faltan:
+                print(f"::warning::{tienda}: a la app le faltan permisos {faltan}")
         except Exception as e:
-            estado[tienda] = f"error: {e}"
-            print(f"  🚨 {tienda}: {e}")
-            # Si falla una tienda, conservamos sus datos de la corrida anterior
-            if not ventas_old.empty:
-                ventas.append(ventas_old[ventas_old["tienda"] == tienda])
-            if not stock_old.empty:
-                stock.append(stock_old[stock_old["tienda"] == tienda])
+            scopes = None
+            print(f"::warning::{tienda}: no pude leer los permisos ({e})")
+
+        dias = DIAS_HISTORIA
+        if scopes is not None and "read_all_orders" not in scopes:
+            dias = 59
+            print(f"::warning::{tienda}: sin permiso read_all_orders -> solo se bajan {dias} días de ventas")
+        desde_t = (ahora - timedelta(days=dias)).strftime("%Y-%m-%d")
+
+        # --- STOCK (imprescindible) ---
+        ds = None
+        intentos_stock = [("completa", Q_VARIANTS), ("sin ubicaciones", Q_VARIANTS_SIN_UBIC),
+                          ("sin costo/imagen", Q_VARIANTS_MIN % "price"), ("mínima", Q_VARIANTS_MIN % "")]
+        if scopes is not None and "read_locations" not in scopes:
+            print(f"::warning::{tienda}: sin permiso read_locations -> stock total, sin detalle por ubicación")
+            intentos_stock = [("sin ubicaciones", Q_VARIANTS_SIN_UBIC)]
+        for nombre_q, q in intentos_stock:
+            try:
+                ds = parsear_stock(cli.bulk(q), tienda, vmap, cli.store_url)
+                if nombre_q != "completa":
+                    print(f"::warning::{tienda}: stock bajado con consulta {nombre_q} (faltan permisos para costo/imagen/precio)")
+                break
+            except BulkError as e:
+                print(f"  ⚠️  {tienda}: stock con consulta {nombre_q} falló: {e}")
+                if e.code != "ACCESS_DENIED":
+                    break
+            except Exception as e:
+                print(f"  ⚠️  {tienda}: stock con consulta {nombre_q} falló: {e}")
+                break
+
+        # --- VENTAS ---
+        dv = None
+        intentos = [("completa", Q_ORDERS % desde_t), ("mínima", Q_ORDERS_MIN % desde_t)]
+        if dias > 59:
+            d59 = (ahora - timedelta(days=59)).strftime("%Y-%m-%d")
+            intentos.insert(1, ("completa 59 días", Q_ORDERS % d59))
+            intentos.append(("mínima 59 días", Q_ORDERS_MIN % d59))
+        for nombre_q, q in intentos:
+            try:
+                dv = parsear_ventas(cli.bulk(q), tienda, vmap)
+                if nombre_q != "completa":
+                    print(f"::warning::{tienda}: ventas bajadas con consulta {nombre_q}")
+                break
+            except BulkError as e:
+                print(f"  ⚠️  {tienda}: ventas con consulta {nombre_q} falló: {e}")
+                if e.code != "ACCESS_DENIED":
+                    break
+            except Exception as e:
+                print(f"  ⚠️  {tienda}: ventas con consulta {nombre_q} falló: {e}")
+                break
+
+        if ds is not None and not ds.empty:
+            stock.append(ds)
+        elif not stock_old.empty:
+            stock.append(stock_old[stock_old["tienda"] == tienda])
+        if dv is not None:
+            ventas.append(dv)
+        elif not ventas_old.empty:
+            ventas.append(ventas_old[ventas_old["tienda"] == tienda])
+
+        if ds is None:
+            estado[tienda] = "error: no se pudo leer el stock"
+            print(f"::error::{tienda}: no se pudo leer el stock (ver líneas ⚠️ del log)")
+        elif dv is None:
+            estado[tienda] = "parcial: stock ok, ventas con error"
+            print(f"::error::{tienda}: stock OK pero no se pudieron leer las ventas (ver líneas ⚠️ del log)")
+        else:
+            estado[tienda] = "ok"
+        print(f"  {'✅' if estado[tienda] == 'ok' else '⚠️'} {tienda}: "
+              f"{int(dv['unidades'].sum()) if dv is not None and not dv.empty else 0} uds vendidas, "
+              f"{ds['sku'].nunique() if ds is not None and not ds.empty else 0} SKUs ({time.time() - t:.0f}s)")
 
     df_v = pd.concat([d for d in ventas if not d.empty], ignore_index=True) if ventas else pd.DataFrame()
     df_s = pd.concat([d for d in stock if not d.empty], ignore_index=True) if stock else pd.DataFrame()
     if df_s.empty:
         print("🛑 No se obtuvo stock de ninguna tienda. No se pisa nada.")
+        print("::error::No se obtuvo stock de ninguna tienda. Revisá los secrets TOKEN_* y los avisos de arriba.")
         sys.exit(1)
 
     _guardar(df_v, "ventas_diarias.parquet")
