@@ -108,6 +108,29 @@ section[data-testid="stSidebar"] button:hover * { color:var(--tinta); }
 .tag { display:inline-block; padding:2px 7px; font-size:10.5px; font-weight:600; margin:6px 5px 0 0; background:var(--tinta); color:var(--papel); text-transform:uppercase; letter-spacing:.06em; }
 .tag.hot { background:var(--senal); color:var(--tinta); }
 
+/* ---- vitrina ---- */
+.card { background:#fff; border:2px solid var(--tinta); margin-bottom:6px; position:relative; transition:transform .1s, box-shadow .1s; }
+.card:hover { transform:translate(-3px,-3px); box-shadow:6px 6px 0 var(--tinta); }
+.card .ph { height:190px; display:flex; align-items:center; justify-content:center; border-bottom:2px solid var(--tinta); background:#fff; overflow:hidden; }
+.card .ph img { max-width:100%; max-height:186px; object-fit:contain; }
+.card .badge { position:absolute; top:0; left:0; padding:3px 8px; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.08em; border-right:2px solid var(--tinta); border-bottom:2px solid var(--tinta); }
+.card .abc { position:absolute; top:0; right:0; padding:3px 8px; font-size:10px; font-weight:600; background:var(--tinta); color:var(--papel); }
+.card .bd { padding:10px 10px 8px; }
+.card .nm { font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:15px; line-height:1.1; height:34px; overflow:hidden; letter-spacing:-.02em; }
+.card .cd { font-size:10px; color:var(--gris); text-transform:uppercase; letter-spacing:.06em; margin:3px 0 8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.card .tl { display:flex; flex-wrap:wrap; gap:3px; margin-bottom:8px; }
+.card .tl span { font-size:10px; min-width:24px; text-align:center; padding:2px 3px; border:1.5px solid var(--tinta); font-weight:600; }
+.card .tl .on { background:var(--tinta); color:var(--papel); }
+.card .tl .br { background:var(--senal); border-color:var(--senal); color:var(--tinta); }
+.card .tl .off { color:#B8B0A0; border-color:#D8D0BF; }
+.card .st { display:grid; grid-template-columns:repeat(3,1fr); border-top:1.5px solid var(--tinta); }
+.card .st div { padding:6px 0 2px; font-size:9.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--gris); }
+.card .st div + div { border-left:1.5px solid var(--tinta); padding-left:7px; }
+.card .st b { display:block; font-family:'Space Grotesk',sans-serif; font-size:17px; color:var(--tinta); letter-spacing:-.02em; }
+.card .rp { background:var(--senal); font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.08em; padding:6px 10px; display:flex; justify-content:space-between; border-top:2px solid var(--tinta); }
+.card .rp.no { background:var(--papel); color:var(--gris); }
+.legend-tl { font-size:11px; margin:-4px 0 12px; }
+.legend-tl span { display:inline-block; width:14px; height:12px; border:1.5px solid var(--tinta); vertical-align:-2px; margin:0 5px 0 14px; }
 .login-t { font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:clamp(48px,7vw,96px); letter-spacing:-.06em; line-height:.85; }
 .login-t span { color:var(--senal); }
 @media (max-width:900px){ .grid{grid-template-columns:repeat(2,1fr)} .mast-sub{flex-wrap:wrap; gap:8px 18px} }
@@ -318,8 +341,23 @@ params = {**core.PARAMS_DEFAULT, "lead_time": int(lead_time), "cobertura": int(c
 hoy = datetime.now(ZONA_AR).date()
 ventas, hist, sku_all, mod_all = calcular(ventas_raw, stock_raw, hist_raw, tuple(ubicaciones), tuple(estados),
                                           json.dumps(params, default=str), hoy)
-sku = sku_all[sku_all["marca"].isin(marcas)].copy()
-mod = mod_all[mod_all["marca"].isin(marcas)].copy()
+RE_TEMP = r"((?:SS|FW|AW|OI|PV|SP|FA|HO)\d{2})$"
+AZURE = "https://distriecomm.blob.core.windows.net/catalogo"
+
+
+def enriquecer(df):
+    df = df.copy()
+    df["temporada"] = df["modelo_color"].astype(str).str.upper().str.extract(RE_TEMP, expand=False).fillna("S/T")
+    vacia = df["img_url"].fillna("").eq("")
+    df.loc[vacia, "img_url"] = AZURE + "/" + df.loc[vacia, "marca"].astype(str) + "/" + df.loc[vacia, "modelo_color"].astype(str).str.upper() + "-1.jpg"
+    return df
+
+
+sku_all, mod_all = enriquecer(sku_all), enriquecer(mod_all)
+temps_all = sorted(t for t in mod_all["temporada"].unique() if t != "S/T") + (["S/T"] if (mod_all["temporada"] == "S/T").any() else [])
+temporadas = sb.multiselect("Temporada", temps_all, default=temps_all) if len(temps_all) > 1 else temps_all
+sku = sku_all[sku_all["marca"].isin(marcas) & sku_all["temporada"].isin(temporadas)].copy()
+mod = mod_all[mod_all["marca"].isin(marcas) & mod_all["temporada"].isin(temporadas)].copy()
 if multiplo > 1:
     sku["sugerido"] = (np.ceil(sku["sugerido"] / multiplo) * multiplo).astype(int)
 alertas = core.resumen_alertas(sku, mod)
@@ -355,17 +393,15 @@ if hace > 6:
 
 disp_tot = sku["disponible"].clip(lower=0).sum()
 grilla([
-    ("Venta neta 30d", money(sku["vta30"].sum()), f"{num(sku['u30'].sum())} uds · hoy {num(sku['u_hoy'].sum())}", ""),
     ("Velocidad", f"{num(sku['velocidad'].sum(), 1)}<small style='font-size:.4em'> uds/día</small>",
      f"cobertura global {num(disp_tot / max(sku['velocidad'].sum(), 0.01))} días", ""),
     ("Stock disponible", num(disp_tot), f"{money(sku['valor_stock'].sum())} · entrante {num(sku['entrante'].sum())}", ""),
     ("Venta perdida / día", money(vp), f"{len(alertas['quiebre'])} SKUs en quiebre con demanda", "hot"),
     ("SKUs a reponer", num(len(alertas["reponer"])), f"{num(sku['sugerido'].sum())} uds sugeridas", "ink"),
-    ("Inversión sugerida", money(sku["valor_sugerido"].sum()), "a costo (o precio si no hay costo)", ""),
     ("Curva rota", num(len(alertas["curva_rota"])), "modelos sin talles con demanda", ""),
     ("Capital inmovilizado", money(alertas["sobrestock"]["valor_stock"].sum() + alertas["sin_movimiento"]["valor_stock"].sum()),
      f"{len(alertas['sobrestock']) + len(alertas['sin_movimiento'])} SKUs sobrestock / sin mov.", ""),
-])
+], cols=3)
 
 # ==============================================================================
 # COLUMNAS COMUNES
@@ -378,12 +414,12 @@ CFG = {
     "tendencia": st.column_config.NumberColumn("v7/v30", format="%.2f"),
     "sell_through_30": st.column_config.ProgressColumn("Sell-through 30d", format="percent", min_value=0, max_value=1),
     "curva_pct": st.column_config.ProgressColumn("Curva", format="percent", min_value=0, max_value=1),
-    "vta30": st.column_config.NumberColumn("Venta 30d", format="dollar"),
-    "vta90": st.column_config.NumberColumn("Venta 90d", format="dollar"),
-    "valor_stock": st.column_config.NumberColumn("Valor stock", format="dollar"),
-    "valor_sugerido": st.column_config.NumberColumn("Valor sugerido", format="dollar"),
-    "venta_perdida_dia": st.column_config.NumberColumn("Venta perdida/día", format="dollar"),
-    "precio": st.column_config.NumberColumn("Precio", format="dollar"),
+    "vta30": st.column_config.NumberColumn("Venta 30d", format="localized"),
+    "vta90": st.column_config.NumberColumn("Venta 90d", format="localized"),
+    "valor_stock": st.column_config.NumberColumn("Valor stock", format="localized"),
+    "valor_sugerido": st.column_config.NumberColumn("Valor sugerido", format="localized"),
+    "venta_perdida_dia": st.column_config.NumberColumn("Venta perdida/día", format="localized"),
+    "precio": st.column_config.NumberColumn("Precio", format="localized"),
     "fecha_quiebre": st.column_config.DateColumn("Quiebre est.", format="DD/MM/YY"),
     "ultima_venta": st.column_config.DateColumn("Últ. venta", format="DD/MM/YY"),
     "punto_pedido": st.column_config.NumberColumn("Pto. pedido", format="%.0f"),
@@ -418,7 +454,7 @@ def a_excel(hojas: dict) -> bytes:
     return buf.getvalue()
 
 
-def detalle_modelo(fila):
+def detalle_modelo(fila, pref="m"):
     """Ficha Modelo+Color con desglose SKU por talle."""
     d = sku[(sku["tienda"] == fila["tienda"]) & (sku["modelo_color"] == fila["modelo_color"])].copy()
     d = d.iloc[sorted(range(len(d)), key=lambda i: core.clave_talle(d.iloc[i]["talle"]))]
@@ -447,7 +483,8 @@ def detalle_modelo(fila):
         fig.add_bar(x=x, y=d["entrante"], name="Entrante", marker_color=GRIS)
         fig.add_bar(x=x, y=d["u30"], name="Vendido 30d", marker_color=AZUL)
         fig.add_bar(x=x, y=d["sugerido"], name="Sugerido", marker_color=SENAL, marker_line=dict(color=TINTA, width=1.5))
-        st.plotly_chart(estilo(fig, "Curva de talles", 290, barmode="group", xaxis_type="category"), width="stretch")
+        st.plotly_chart(estilo(fig, "Curva de talles", 290, barmode="group", xaxis_type="category"), width="stretch",
+                        key=f"curva_{pref}_{fila['tienda']}_{fila['modelo_color']}")
 
         skus = set(d["sku"])
         vv = ventas[(ventas["tienda"] == fila["tienda"]) & ventas["sku"].isin(skus)]
@@ -461,16 +498,42 @@ def detalle_modelo(fila):
             if not hh.empty:
                 fig2.add_scatter(x=hh.index, y=hh.values, name="Stock", yaxis="y2", line=dict(color=AZUL, width=2, dash="dot"))
         st.plotly_chart(estilo(fig2, "Ventas diarias 90d vs stock", 270,
-                               yaxis2=dict(overlaying="y", side="right", showgrid=False, linecolor=TINTA, linewidth=2)), width="stretch")
+                               yaxis2=dict(overlaying="y", side="right", showgrid=False, linecolor=TINTA, linewidth=2)), width="stretch",
+                        key=f"serie_{pref}_{fila['tienda']}_{fila['modelo_color']}")
     seccion("Desglose por SKU", f"{len(d)} talles")
-    tabla(d, [c for c in COLS_SKU if c not in ("img_url", "marca", "producto", "color", "url_admin")], key=f"det_{fila['modelo_color']}")
+    tabla(d, [c for c in COLS_SKU if c not in ("img_url", "marca", "producto", "color", "url_admin")], key=f"det_{pref}_{fila['tienda']}_{fila['modelo_color']}")
+
+
+def tarjeta(fila, talles):
+    """HTML de la tarjeta de un Modelo+Color para la vitrina."""
+    est = fila["estado_rep"]
+    col = COLOR_ESTADO.get(est, PAPEL)
+    txt = PAPEL if col in (TINTA, AZUL) else TINTA
+    tl = "".join(
+        f'<span class="{"on" if dsp > 0 else ("br" if dem > 0 else "off")}">{t}</span>' for t, dsp, dem in talles)
+    cob = num(fila["cobertura_dias"]) if np.isfinite(fila["cobertura_dias"]) else "∞"
+    rp = (f'<div class="rp"><span>Reponer</span><span>{num(fila["sugerido"])} uds</span></div>' if fila["sugerido"] > 0
+          else '<div class="rp no"><span>Sin reposición</span><span>—</span></div>')
+    return (f'<div class="card"><div class="ph"><img src="{fila["img_url"]}" loading="lazy"></div>'
+            f'<div class="badge" style="background:{col};color:{txt}">{est[2:]}</div><div class="abc">{fila["abc"]}</div>'
+            f'<div class="bd"><div class="nm">{fila["producto"]}</div>'
+            f'<div class="cd">{fila["marca"]} · {fila["modelo_color"]} · {fila["color"]}</div>'
+            f'<div class="tl">{tl}</div>'
+            f'<div class="st"><div>Vel/día<b>{num(fila["velocidad"], 1)}</b></div><div>Cobert.<b>{cob}d</b></div>'
+            f'<div>Disp.<b>{num(fila["disponible"])}</b></div></div></div>{rp}</div>')
+
+
+def talles_de(tienda, mc):
+    d = sku[(sku["tienda"] == tienda) & (sku["modelo_color"] == mc)]
+    filas = sorted(zip(d["talle"].astype(str), d["disponible"], d["u90"]), key=lambda x: core.clave_talle(x[0]))
+    return filas
 
 
 # ==============================================================================
 # TABS
 # ==============================================================================
-tab_al, tab_mod, tab_sku, tab_plan, tab_tend = st.tabs(
-    ["01 · Alertas", "02 · Modelo + Color", "03 · SKU", "04 · Plan de reposición", "05 · Tendencias"])
+tab_al, tab_vit, tab_mod, tab_sku, tab_plan, tab_ana, tab_tend = st.tabs(
+    ["01 · Alertas", "02 · Vitrina", "03 · Modelo + Color", "04 · SKU", "05 · Plan de reposición", "06 · Análisis", "07 · Tendencias"])
 
 # ---------------- ALERTAS ----------------
 with tab_al:
@@ -492,6 +555,26 @@ with tab_al:
                     marker_line=dict(color=TINTA, width=1))
     st.plotly_chart(estilo(fig, "Salud del surtido por marca · SKUs", 80 + 42 * max(len(marcas), 1), barmode="stack"), width="stretch")
 
+    # Calendario de quiebres: qué se queda sin stock en los próximos 45 días
+    prox = sku[(sku["velocidad"] > 0) & (sku["disponible"] > 0) & sku["fecha_quiebre"].notna()].copy()
+    prox = prox[prox["fecha_quiebre"] <= pd.Timestamp(hoy) + pd.Timedelta(days=45)]
+    if not prox.empty:
+        prox["riesgo"] = prox["velocidad"] * prox["precio"]
+        cal = prox.groupby("fecha_quiebre").agg(skus=("sku", "count"), riesgo=("riesgo", "sum")).reset_index()
+        cal["riesgo_acum"] = cal["riesgo"].cumsum()
+        fig = go.Figure()
+        fig.add_bar(x=cal["fecha_quiebre"], y=cal["skus"], name="SKUs que se quiebran", marker_color=TINTA,
+                    hovertemplate="%{x|%d/%m}<br>%{y} SKUs<extra></extra>")
+        fig.add_scatter(x=cal["fecha_quiebre"], y=cal["riesgo_acum"], name="Venta diaria en riesgo (acum.)", yaxis="y2",
+                        line=dict(color=SENAL, width=3, shape="hv"), hovertemplate="%{x|%d/%m}<br>$%{y:,.0f}/día<extra></extra>")
+        fig.add_vline(x=pd.Timestamp(hoy) + pd.Timedelta(days=int(lead_time)), line=dict(color=SENAL, dash="dash", width=2))
+        fig.add_annotation(x=pd.Timestamp(hoy) + pd.Timedelta(days=int(lead_time)), y=1, yref="paper", text=" LLEGA UN PEDIDO DE HOY",
+                           showarrow=False, xanchor="left", font=dict(size=10, color=SENAL))
+        st.plotly_chart(estilo(fig, f"Calendario de quiebres · próximos 45 días · {num(len(prox))} SKUs", 300,
+                               yaxis2=dict(overlaying="y", side="right", showgrid=False, linecolor=TINTA, linewidth=2, rangemode="tozero"),
+                               yaxis=dict(rangemode="tozero")),
+                        width="stretch")
+
     sub = st.tabs([f"{LABEL_ALERTA[k_]} ({len(alertas[k_])})" for k_ in claves])
     for t, k_ in zip(sub, claves):
         with t:
@@ -502,6 +585,168 @@ with tab_al:
             tabla(df, COLS_MOD if k_ in ("curva_rota", "acelerando") else COLS_SKU, key=f"al_{k_}", height=450)
             st.download_button("⬇️ Descargar Excel", a_excel({k_: df.drop(columns=["img_url"], errors="ignore")}),
                                f"alerta_{k_}_{hoy}.xlsx", key=f"dl_{k_}")
+
+# ---------------- VITRINA ----------------
+with tab_vit:
+    v1, v2, v3, v4 = st.columns([2, 2, 1.3, 1])
+    vq = v1.text_input("Buscar", key="q_vit", placeholder="código, nombre o color")
+    vest = v2.multiselect("Estado", core.ESTADOS, default=core.ESTADOS[:3], key="est_vit")
+    vord = v3.selectbox("Ordenar por", ["Venta perdida", "Velocidad", "Sugerido", "Cobertura ↑", "Tendencia", "Valor stock"], key="ord_vit")
+    vxp = v4.selectbox("Por página", [12, 24, 48], index=1, key="pp_vit")
+    vf = mod.copy()
+    if vq:
+        qq = vq.lower()
+        vf = vf[vf[["modelo_color", "producto", "color"]].astype(str).apply(lambda c: c.str.lower().str.contains(qq, regex=False)).any(axis=1)]
+    if vest:
+        vf = vf[vf["estado_rep"].isin(vest)]
+    oc = {"Venta perdida": ("venta_perdida_dia", False), "Velocidad": ("velocidad", False), "Sugerido": ("sugerido", False),
+          "Cobertura ↑": ("cobertura_dias", True), "Tendencia": ("tendencia", False), "Valor stock": ("valor_stock", False)}[vord]
+    vf = vf.sort_values(oc[0], ascending=oc[1]).reset_index(drop=True)
+    paginas = max(1, int(np.ceil(len(vf) / vxp)))
+    pc1, pc2 = st.columns([4, 1])
+    pag = pc2.number_input(f"Página (de {paginas})", 1, paginas, 1, key="pag_vit")
+    pc1.markdown(f'<div class="legend-tl">{num(len(vf))} modelos · talles: <span style="background:#0A0A0A"></span>con stock'
+                 f'<span style="background:#FF4F00;border-color:#FF4F00"></span>quebrado con demanda'
+                 f'<span style="border-color:#D8D0BF"></span>sin stock sin demanda</div>', unsafe_allow_html=True)
+
+    sel_key = "vit_sel"
+    if st.session_state.get(sel_key) is not None:
+        t_, mc_ = st.session_state[sel_key]
+        fsel = mod[(mod["tienda"] == t_) & (mod["modelo_color"] == mc_)]
+        if not fsel.empty:
+            hc1, hc2 = st.columns([6, 1])
+            hc1.markdown(f'<div class="sec">Ficha · {mc_}<small>seleccionado desde la vitrina</small></div>', unsafe_allow_html=True)
+            if hc2.button("✕ Cerrar", key="vit_close", width="stretch"):
+                st.session_state[sel_key] = None
+                st.rerun()
+            detalle_modelo(fsel.iloc[0], pref="vit")
+            st.divider()
+
+    page = vf.iloc[(pag - 1) * vxp: pag * vxp]
+    ncol = 4
+    for i in range(0, len(page), ncol):
+        cols = st.columns(ncol, gap="medium")
+        for c, (_, fila) in zip(cols, page.iloc[i:i + ncol].iterrows()):
+            c.markdown(tarjeta(fila, talles_de(fila["tienda"], fila["modelo_color"])), unsafe_allow_html=True)
+            if c.button("Ver ficha →", key=f"vb_{fila['tienda']}_{fila['modelo_color']}", width="stretch"):
+                st.session_state[sel_key] = (fila["tienda"], fila["modelo_color"])
+                st.rerun()
+
+# ---------------- ANÁLISIS ----------------
+with tab_ana:
+    # 1) Matriz velocidad × cobertura (interactiva: seleccioná con caja o lazo)
+    seccion("Matriz velocidad × cobertura", "arrastrá para seleccionar modelos · doble clic para resetear")
+    mm = mod[(mod["velocidad"] > 0)].copy()
+    mm = mm.sort_values("vta90", ascending=False).head(1500)
+    mm["cob_plot"] = mm["cobertura_dias"].replace(np.inf, 400).clip(0.5, 400)
+    mm["tam"] = np.sqrt(mm["valor_stock"].clip(lower=0) + 1)
+    mm["tam"] = 6 + 34 * mm["tam"] / max(mm["tam"].max(), 1)
+    fig = go.Figure()
+    for e in core.ESTADOS:
+        x = mm[mm["estado_rep"] == e]
+        if x.empty:
+            continue
+        fig.add_scatter(x=x["velocidad"], y=x["cob_plot"], mode="markers", name=e[2:],
+                        marker=dict(size=x["tam"], color=COLOR_ESTADO[e], line=dict(color=TINTA, width=1), opacity=.85),
+                        customdata=np.stack([x["tienda"], x["modelo_color"], x["producto"], x["disponible"], x["sugerido"]], axis=-1),
+                        hovertemplate="<b>%{customdata[2]}</b><br>%{customdata[1]}<br>Vel %{x:.2f}/día · Cob %{y:.0f}d"
+                                      "<br>Disp %{customdata[3]} · Reponer %{customdata[4]}<extra></extra>")
+    lt_ = int(lead_time)
+    fig.add_hline(y=lt_, line=dict(color=SENAL, dash="dash", width=2))
+    fig.add_hline(y=float(dias_sobre), line=dict(color=AZUL, dash="dash", width=2))
+    vmed = float(mm["velocidad"].median()) if not mm.empty else 1
+    fig.add_vline(x=vmed, line=dict(color=GRIS, dash="dot", width=1.5))
+    for tx, xx, yy, xa, ya in [("REPONER YA", 0.99, 0.02, "right", "bottom"), ("LIQUIDAR", 0.01, 0.98, "left", "top"),
+                               ("SOBRECOMPRADOS", 0.99, 0.98, "right", "top"), ("COLA LARGA", 0.01, 0.02, "left", "bottom")]:
+        fig.add_annotation(x=xx, y=yy, xref="paper", yref="paper", text=tx, showarrow=False, xanchor=xa, yanchor=ya,
+                           font=dict(family="Space Grotesk, sans-serif", size=18, color="rgba(10,10,10,.28)"))
+    estilo(fig, "", 520, dragmode="select")
+    fig.update_xaxes(type="log", title="velocidad (uds/día) →", tickvals=[0.01, 0.03, 0.1, 0.25, 0.5, 1, 2, 5, 10, 20, 50],
+                     ticktext=["0,01", "0,03", "0,1", "0,25", "0,5", "1", "2", "5", "10", "20", "50"])
+    fig.update_yaxes(type="log", title="cobertura (días) →", tickvals=[1, 7, 15, 30, 60, 90, 180, 365],
+                     ticktext=["1", "7", "15", "30", "60", "90", "180", "365+"])
+    ev_m = st.plotly_chart(fig, width="stretch", on_select="rerun", selection_mode=("box", "lasso"), key="matriz")
+    puntos = (ev_m.selection.points if ev_m is not None and hasattr(ev_m, "selection") else []) or []
+    if puntos:
+        claves_sel = {(p["customdata"][0], p["customdata"][1]) for p in puntos if p.get("customdata")}
+        sel = mod[[(t, m) in claves_sel for t, m in zip(mod["tienda"], mod["modelo_color"])]]
+        grilla([("Modelos seleccionados", num(len(sel)), "", "ink"), ("Stock", num(sel["disponible"].sum()), money(sel["valor_stock"].sum()), ""),
+                ("A reponer", num(sel["sugerido"].sum()), "uds sugeridas", "hot")], cols=3)
+        tabla(sel.sort_values("velocidad", ascending=False), COLS_MOD, key="tabla_matriz", height=360)
+        st.download_button("⬇️ Excel de la selección", a_excel({"seleccion": sel.drop(columns=["img_url"], errors="ignore")}),
+                           f"seleccion_matriz_{hoy}.xlsx", key="dl_matriz")
+
+    # 2) Treemap: dónde está la plata (stock valorizado), color = cobertura
+    seccion("Dónde está el stock", "clic para entrar en marca → tipo → modelo · color = días de cobertura")
+    tm = mod[mod["valor_stock"] > 0].copy()
+    tm["tipo"] = tm["tipo"].replace("", "Sin tipo").fillna("Sin tipo")
+    tm = tm.sort_values("valor_stock", ascending=False).groupby("marca").head(150)
+    tm["cob_c"] = tm["cobertura_dias"].replace(np.inf, 365).clip(0, 365)
+    if not tm.empty:
+        import plotly.express as px
+        figt = px.treemap(tm, path=[px.Constant("Total"), "marca", "tipo", "modelo_color"], values="valor_stock", color="cob_c",
+                          color_continuous_scale=[[0, SENAL], [0.12, "#FFD000"], [0.3, PAPEL], [1, AZUL]], range_color=(0, 365),
+                          hover_data={"producto": True, "disponible": True, "velocidad": ":.2f", "cob_c": ":.0f"})
+        figt.update_traces(marker=dict(line=dict(color=TINTA, width=1.5)), root_color=PAPEL,
+                           texttemplate="<b>%{label}</b><br>%{value:$,.0f}", textfont=dict(family="IBM Plex Mono, monospace", size=11))
+        figt.update_layout(coloraxis_colorbar=dict(title="días", thickness=12))
+        st.plotly_chart(estilo(figt, "", 520), width="stretch")
+
+    # 3) Mapa de calor de talles
+    seccion("Mapa de talles", "cobertura en días por talle · los modelos que más venden")
+    h1, h2 = st.columns([2, 1])
+    hm_marca = h1.selectbox("Marca", sorted(mod["marca"].unique()), key="hm_marca")
+    hm_n = h2.slider("Modelos", 10, 60, 25, 5, key="hm_n")
+    top_m = mod[mod["marca"] == hm_marca].sort_values("velocidad", ascending=False).head(hm_n)
+    dh = sku[(sku["marca"] == hm_marca) & sku["modelo_color"].isin(top_m["modelo_color"])].copy()
+    if not dh.empty:
+        dh["talle"] = dh["talle"].astype(str)
+        dh["cob"] = np.where(dh["velocidad"] > 0, dh["disponible"].clip(lower=0) / dh["velocidad"],
+                             np.where(dh["disponible"] > 0, 120, np.nan))
+        piv = dh.pivot_table(index="modelo_color", columns="talle", values="cob", aggfunc="mean")
+        txt = dh.pivot_table(index="modelo_color", columns="talle", values="disponible", aggfunc="sum")
+        cols_t = sorted(piv.columns, key=core.clave_talle)
+        orden_m = [m for m in top_m["modelo_color"] if m in piv.index]
+        piv, txt = piv.reindex(index=orden_m, columns=cols_t), txt.reindex(index=orden_m, columns=cols_t)
+        figh = go.Figure(go.Heatmap(z=piv.clip(upper=120).values, x=cols_t, y=piv.index, zmin=0, zmax=120,
+                                    text=txt.fillna("").values, texttemplate="%{text}", textfont=dict(size=10),
+                                    colorscale=[[0, SENAL], [0.25, "#FFD000"], [0.5, PAPEL], [1, AZUL]], xgap=2, ygap=2,
+                                    hovertemplate="%{y} · talle %{x}<br>cobertura %{z:.0f} días · disp %{text}<extra></extra>",
+                                    colorbar=dict(title="días", thickness=12)))
+        estilo(figh, "", 40 + 26 * len(orden_m))
+        figh.update_yaxes(autorange="reversed", type="category")
+        figh.update_xaxes(type="category", side="top")
+        st.plotly_chart(figh, width="stretch")
+
+    # 4) Comparativo por marca
+    seccion("Comparativo por marca")
+    cm = sku.groupby("marca").agg(skus=("sku", "count"), u30=("u30", "sum"), vta30=("vta30", "sum"),
+                                  disp=("disponible", lambda x: x.clip(lower=0).sum()), vel=("velocidad", "sum"),
+                                  quiebres=("estado_rep", lambda x: int((x == core.ESTADOS[0]).sum())),
+                                  perdida=("venta_perdida_dia", "sum"), valor=("valor_stock", "sum")).reset_index()
+    cm["cobertura"] = cm["disp"] / cm["vel"].replace(0, np.nan)
+    cm["sell_through"] = cm["u30"] / (cm["u30"] + cm["disp"]).replace(0, np.nan)
+    cm["pct_quiebre"] = cm["quiebres"] / cm["skus"]
+    figc = go.Figure()
+    figc.add_bar(x=cm["marca"], y=cm["sell_through"], name="Sell-through 30d", marker_color=TINTA, yaxis="y",
+                 hovertemplate="%{x}<br>%{y:.0%}<extra></extra>")
+    figc.add_bar(x=cm["marca"], y=cm["pct_quiebre"], name="% SKUs en quiebre", marker_color=SENAL,
+                 hovertemplate="%{x}<br>%{y:.0%}<extra></extra>")
+    figc.add_scatter(x=cm["marca"], y=cm["cobertura"], name="Cobertura (días)", yaxis="y2", mode="markers+lines",
+                     marker=dict(size=12, symbol="square", color=AZUL, line=dict(color=TINTA, width=1.5)), line=dict(color=AZUL, width=2))
+    st.plotly_chart(estilo(figc, "", 360, barmode="group", yaxis=dict(tickformat=".0%"),
+                           yaxis2=dict(overlaying="y", side="right", showgrid=False, title="días", linecolor=TINTA, linewidth=2,
+                                       rangemode="tozero")),
+                    width="stretch")
+    st.dataframe(cm[["marca", "skus", "u30", "vta30", "disp", "valor", "cobertura", "sell_through", "quiebres", "perdida"]],
+                 hide_index=True, width="stretch",
+                 column_config={"marca": "Marca", "skus": "SKUs", "u30": "Uds 30d",
+                                "vta30": st.column_config.NumberColumn("Venta 30d", format="localized"), "disp": "Disp.",
+                                "valor": st.column_config.NumberColumn("Valor stock", format="localized"),
+                                "cobertura": st.column_config.NumberColumn("Cobertura (d)", format="%.0f"),
+                                "sell_through": st.column_config.ProgressColumn("Sell-through 30d", format="percent", min_value=0, max_value=1),
+                                "quiebres": "En quiebre",
+                                "perdida": st.column_config.NumberColumn("Venta perdida/día", format="localized")})
 
 # ---------------- MODELO + COLOR ----------------
 with tab_mod:
@@ -562,7 +807,7 @@ with tab_plan:
                           disabled=[c for c in cols_plan if c not in ("pedir", "a_pedir")],
                           column_config={**CFG, "pedir": st.column_config.CheckboxColumn("✔"),
                                          "a_pedir": st.column_config.NumberColumn("A pedir ✏️", min_value=0, step=1),
-                                         "costo": st.column_config.NumberColumn("Costo", format="dollar")})
+                                         "costo": st.column_config.NumberColumn("Costo", format="localized")})
     final = edit[edit["pedir"] & (edit["a_pedir"] > 0)].copy()
     final["valor"] = final["a_pedir"] * final["costo"].fillna(final["precio"])
     res = final.groupby("marca").agg(skus=("sku", "count"), unidades=("a_pedir", "sum"), valor=("valor", "sum")).reset_index()
@@ -570,7 +815,7 @@ with tab_plan:
             ("Unidades", num(final["a_pedir"].sum()), "a pedir", ""),
             ("Valor del pedido", money(final["valor"].sum()), "a costo", "hot")], cols=3)
     st.dataframe(res, hide_index=True, width="stretch",
-                 column_config={"valor": st.column_config.NumberColumn("Valor", format="dollar")})
+                 column_config={"valor": st.column_config.NumberColumn("Valor", format="localized")})
     hojas = {"Resumen": res}
     for m_, g in final.groupby("marca"):
         hojas[m_] = g[["sku", "producto", "color", "talle", "a_pedir", "disponible", "entrante", "velocidad", "cobertura_dias", "estado_rep"]]
