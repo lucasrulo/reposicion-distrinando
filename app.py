@@ -41,16 +41,42 @@ html, body, .stApp, [data-testid="stMarkdownContainer"], input, textarea, label,
 h1,h2,h3,h4 { font-family:'Space Grotesk', sans-serif !important; letter-spacing:-.03em; color:var(--tinta); }
 header[data-testid="stHeader"] { background:transparent; }
 
-/* ---- sidebar invertida ---- */
-section[data-testid="stSidebar"] { background:var(--tinta); border-right:3px solid var(--senal); }
-section[data-testid="stSidebar"] * { color:var(--papel); }
-section[data-testid="stSidebar"] input, section[data-testid="stSidebar"] [data-baseweb="select"] * { color:var(--tinta) !important; }
-section[data-testid="stSidebar"] [data-baseweb="tag"] { background:var(--senal) !important; }
-section[data-testid="stSidebar"] [data-baseweb="tag"] * { color:var(--tinta) !important; }
-section[data-testid="stSidebar"] h1, section[data-testid="stSidebar"] h2, section[data-testid="stSidebar"] h3 { color:var(--papel); text-transform:uppercase; }
-section[data-testid="stSidebar"] button { background:transparent; border:2px solid var(--papel); }
-section[data-testid="stSidebar"] button:hover { background:var(--senal); border-color:var(--senal); }
-section[data-testid="stSidebar"] button:hover * { color:var(--tinta); }
+/* ---- sidebar invertida (colores base en .streamlit/config.toml -> [theme.sidebar]) ---- */
+section[data-testid="stSidebar"] { border-right:3px solid var(--senal); }
+section[data-testid="stSidebar"] .block-container, section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] { padding-top:1rem; }
+section[data-testid="stSidebar"] label p { font-size:11px !important; text-transform:uppercase; letter-spacing:.1em; color:#BDB6A8 !important; }
+.sb-h { display:flex; align-items:baseline; gap:10px; border-top:2px solid var(--papel); margin:22px 0 10px; padding-top:8px; }
+.sb-h b { font-family:'Space Grotesk',sans-serif; font-size:18px; letter-spacing:-.02em; color:var(--papel); text-transform:uppercase; }
+.sb-h span { font-size:10px; color:var(--senal); letter-spacing:.12em; }
+.sb-user { font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:#BDB6A8; margin-bottom:8px; }
+.sb-user b { color:var(--senal); }
+section[data-testid="stSidebar"] [data-baseweb="input"],
+section[data-testid="stSidebar"] [data-baseweb="select"] > div,
+section[data-testid="stSidebar"] [data-baseweb="base-input"] { background:#1C1B19 !important; border:1.5px solid #5A564E !important; }
+section[data-testid="stSidebar"] [data-baseweb="input"]:focus-within,
+section[data-testid="stSidebar"] [data-baseweb="select"] > div:focus-within { border-color:var(--senal) !important; }
+section[data-testid="stSidebar"] input { color:var(--papel) !important; -webkit-text-fill-color:var(--papel) !important; }
+section[data-testid="stSidebar"] [data-baseweb="tag"] { background:var(--senal) !important; border:none !important; margin:2px 4px 2px 0 !important; }
+section[data-testid="stSidebar"] [data-baseweb="tag"] span { color:var(--tinta) !important; font-size:11px; font-weight:600; }
+section[data-testid="stSidebar"] [data-baseweb="tag"] svg { fill:var(--tinta) !important; color:var(--tinta) !important; }
+section[data-testid="stSidebar"] [data-testid="stNumberInput"] button { background:#1C1B19 !important; border:none !important; border-left:1.5px solid #5A564E !important; color:var(--papel) !important; }
+section[data-testid="stSidebar"] [data-testid="stNumberInput"] button:hover { background:var(--senal) !important; color:var(--tinta) !important; }
+section[data-testid="stSidebar"] .stButton button { background:transparent !important; border:1.5px solid var(--papel) !important; box-shadow:3px 3px 0 var(--senal) !important; min-height:36px; }
+section[data-testid="stSidebar"] .stButton button p { color:var(--papel) !important; font-size:11px !important; letter-spacing:.1em; }
+section[data-testid="stSidebar"] .stButton button:hover { background:var(--senal) !important; border-color:var(--senal) !important; }
+section[data-testid="stSidebar"] .stButton button:hover p { color:var(--tinta) !important; }
+section[data-testid="stSidebar"] [data-testid="stExpander"] details { background:transparent !important; border:1.5px solid #3A3833 !important; }
+section[data-testid="stSidebar"] [data-testid="stExpander"] summary { background:transparent !important; padding:10px 12px !important; }
+section[data-testid="stSidebar"] [data-testid="stExpander"] summary p { color:var(--papel) !important; font-size:12px !important; text-transform:uppercase; letter-spacing:.08em; }
+section[data-testid="stSidebar"] [data-testid="stExpander"] summary svg { fill:var(--senal) !important; color:var(--senal) !important; }
+section[data-testid="stSidebar"] [data-testid="stExpander"] summary:hover p { color:var(--senal) !important; }
+section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p { color:#8C8577 !important; font-size:11px; }
+section[data-testid="stSidebar"] [data-testid="stSlider"] [role="slider"] { background:var(--senal) !important; border:2px solid var(--papel) !important; }
+section[data-testid="stSidebar"] [data-testid="stSliderThumbValue"], section[data-testid="stSidebar"] [data-testid="stSliderTickBarMin"],
+section[data-testid="stSidebar"] [data-testid="stSliderTickBarMax"] { color:var(--papel) !important; font-family:'IBM Plex Mono',monospace !important; }
+section[data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stNumberInput"] button { display:none !important; }
+section[data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stNumberInput"] input { padding:4px 6px !important; font-size:12px !important; }
+section[data-testid="stSidebar"] [data-testid="stDataFrame"], section[data-testid="stSidebar"] [data-testid="stDataEditor"] { border:1.5px solid #5A564E; background:#1C1B19; }
 
 /* ---- masthead ---- */
 .mast { border-top:6px solid var(--tinta); border-bottom:2px solid var(--tinta); margin-bottom:0; }
@@ -274,14 +300,13 @@ def login():
 
 
 login()
-st.sidebar.markdown(f"<div style='font-size:11px;letter-spacing:.14em;text-transform:uppercase'>Sesión ▸ "
-                    f"<b style='color:#FF4F00'>{st.session_state['usuario']}</b></div>", unsafe_allow_html=True)
-if st.sidebar.button("Cerrar sesión", width="stretch"):
+st.sidebar.markdown(f"<div class='sb-user'>Sesión ▸ <b>{st.session_state['usuario']}</b></div>", unsafe_allow_html=True)
+_b1, _b2 = st.sidebar.columns(2)
+if _b1.button("↻ Datos", width="stretch"):
+    st.cache_data.clear()
+if _b2.button("Salir", width="stretch"):
     st.session_state.pop("usuario", None)
     st.rerun()
-
-if st.sidebar.button("🔄 Refrescar datos ahora", width="stretch"):
-    st.cache_data.clear()
 
 try:
     ventas_raw, stock_raw, hist_raw, meta = cargar()
@@ -300,40 +325,57 @@ except Exception as e:
 # SIDEBAR / PARÁMETROS
 # ==============================================================================
 sb = st.sidebar
-sb.markdown("### Parámetros")
+
+
+def sb_titulo(n, t):
+    sb.markdown(f"<div class='sb-h'><span>{n}</span><b>{t}</b></div>", unsafe_allow_html=True)
+
+
+RE_TEMP = r"((?:SS|FW|AW|OI|PV|SP|FA|HO)\d{2})$"
+sb_titulo("01", "Filtros")
 marcas_all = sorted(stock_raw["marca"].dropna().unique())
 marcas = sb.multiselect("Marcas", marcas_all, default=marcas_all)
+_temps = (stock_raw["sku"].astype(str).str.rsplit("-", n=1).str[0].str.upper()
+          .str.extract(RE_TEMP, expand=False).fillna("S/T").unique())
+temps_all = sorted(t for t in _temps if t != "S/T") + (["S/T"] if "S/T" in _temps else [])
+temporadas = sb.multiselect("Temporada", temps_all, default=temps_all) if len(temps_all) > 1 else temps_all
+estados = sb.multiselect("Estado del producto", ["ACTIVE", "UNLISTED", "DRAFT", "ARCHIVED"], default=["ACTIVE", "UNLISTED"])
 ubic_all = sorted(stock_raw["ubicacion"].dropna().unique())
 ubicaciones = (sb.multiselect("Ubicaciones que cuentan como stock", ubic_all, default=ubic_all)
                if len(ubic_all) > 1 else ubic_all)
-estados = sb.multiselect("Estado del producto", ["ACTIVE", "UNLISTED", "DRAFT", "ARCHIVED"], default=["ACTIVE", "UNLISTED"])
 
-sb.markdown("### Parámetros de reposición")
+sb_titulo("02", "Reposición")
 c1, c2 = sb.columns(2)
-lead_time = c1.number_input("Lead time (días)", 1, 365, core.PARAMS_DEFAULT["lead_time"])
-cobertura = c2.number_input("Cobertura (días)", 7, 365, core.PARAMS_DEFAULT["cobertura"])
-with sb.expander("Nivel de servicio (stock de seguridad)"):
+lead_time = c1.number_input("Lead time (d)", 1, 365, core.PARAMS_DEFAULT["lead_time"])
+cobertura = c2.number_input("Cobertura (d)", 7, 365, core.PARAMS_DEFAULT["cobertura"])
+multiplo = sb.number_input("Redondear pedido a múltiplos de", 1, 100, 1)
+
+sb_titulo("03", "Avanzado")
+with sb.expander("Nivel de servicio"):
+    st.caption("Probabilidad de no quebrar durante el lead time, según la clase ABC.")
     sA = st.slider("Clase A", 0.50, 0.99, 0.95, 0.01)
     sB = st.slider("Clase B", 0.50, 0.99, 0.90, 0.01)
     sC = st.slider("Clase C", 0.50, 0.99, 0.80, 0.01)
-with sb.expander("Lead time / cobertura por marca"):
-    st.caption("Dejá vacío para usar el general.")
-    base_ov = pd.DataFrame({"marca": marcas_all, "lead_time": [None] * len(marcas_all), "cobertura": [None] * len(marcas_all)})
-    ov = st.data_editor(base_ov, hide_index=True, disabled=["marca"], key="ov",
-                        column_config={"lead_time": st.column_config.NumberColumn("LT", min_value=1),
-                                       "cobertura": st.column_config.NumberColumn("Cob.", min_value=7)})
+with sb.expander("Lead time por marca"):
+    st.caption("0 = usa el general.")
+    h0, h1, h2 = st.columns([1.4, 1, 1])
+    h1.markdown("<div style='font-size:10px;color:#8C8577;letter-spacing:.1em'>LT (D)</div>", unsafe_allow_html=True)
+    h2.markdown("<div style='font-size:10px;color:#8C8577;letter-spacing:.1em'>COB. (D)</div>", unsafe_allow_html=True)
+    por_marca = {}
+    for m_ in marcas_all:
+        r0, r1, r2 = st.columns([1.4, 1, 1], vertical_alignment="center")
+        r0.markdown(f"<div style='font-size:11.5px;line-height:1.1'>{m_}</div>", unsafe_allow_html=True)
+        lt_m = r1.number_input(f"LT {m_}", 0, 365, 0, step=5, key=f"lt_{m_}", label_visibility="collapsed")
+        cb_m = r2.number_input(f"Cob {m_}", 0, 365, 0, step=5, key=f"cb_{m_}", label_visibility="collapsed")
+        o = {}
+        if lt_m: o["lead_time"] = int(lt_m)
+        if cb_m: o["cobertura"] = int(cb_m)
+        if o: por_marca[m_] = o
 with sb.expander("Umbrales de alertas"):
-    dias_sobre = st.number_input("Sobrestock si cobertura > (días)", 30, 720, 180)
+    dias_sobre = st.number_input("Sobrestock si cobertura > días", 30, 720, 180)
     acel = st.number_input("Acelerando si v7/v30 ≥", 1.1, 5.0, 1.5, 0.1)
-    curva = st.slider("Curva rota si % talles con demanda sin stock ≥", 0.1, 1.0, 0.30, 0.05)
-multiplo = sb.number_input("Redondear pedido a múltiplos de", 1, 100, 1)
+    curva = st.slider("Curva rota si % talles sin stock ≥", 0.1, 1.0, 0.30, 0.05)
 
-por_marca = {}
-for _, r in ov.iterrows():
-    o = {}
-    if pd.notna(r["lead_time"]): o["lead_time"] = int(r["lead_time"])
-    if pd.notna(r["cobertura"]): o["cobertura"] = int(r["cobertura"])
-    if o: por_marca[r["marca"]] = o
 params = {**core.PARAMS_DEFAULT, "lead_time": int(lead_time), "cobertura": int(cobertura),
           "servicio": {"A": sA, "B": sB, "C": sC}, "dias_sobrestock": int(dias_sobre), "acelera_ratio": float(acel),
           "curva_rota_pct": float(curva), "por_marca": por_marca}
@@ -341,7 +383,6 @@ params = {**core.PARAMS_DEFAULT, "lead_time": int(lead_time), "cobertura": int(c
 hoy = datetime.now(ZONA_AR).date()
 ventas, hist, sku_all, mod_all = calcular(ventas_raw, stock_raw, hist_raw, tuple(ubicaciones), tuple(estados),
                                           json.dumps(params, default=str), hoy)
-RE_TEMP = r"((?:SS|FW|AW|OI|PV|SP|FA|HO)\d{2})$"
 AZURE = "https://distriecomm.blob.core.windows.net/catalogo"
 
 
@@ -354,8 +395,6 @@ def enriquecer(df):
 
 
 sku_all, mod_all = enriquecer(sku_all), enriquecer(mod_all)
-temps_all = sorted(t for t in mod_all["temporada"].unique() if t != "S/T") + (["S/T"] if (mod_all["temporada"] == "S/T").any() else [])
-temporadas = sb.multiselect("Temporada", temps_all, default=temps_all) if len(temps_all) > 1 else temps_all
 sku = sku_all[sku_all["marca"].isin(marcas) & sku_all["temporada"].isin(temporadas)].copy()
 mod = mod_all[mod_all["marca"].isin(marcas) & mod_all["temporada"].isin(temporadas)].copy()
 if multiplo > 1:
