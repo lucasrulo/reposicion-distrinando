@@ -1,0 +1,19 @@
+[theme]
+base = "light"
+primaryColor = "#FF4F00"
+backgroundColor = "#F3EEE3"
+secondaryBackgroundColor = "#E9E2D3"
+textColor = "#0A0A0A"
+borderColor = "#0A0A0A"
+baseRadius = "none"
+font = "monospace"
+
+[theme.sidebar]
+backgroundColor = "#0A0A0A"
+secondaryBackgroundColor = "#1C1B19"
+textColor = "#F3EEE3"
+primaryColor = "#FF4F00"
+borderColor = "#5A564E"
+
+[client]
+toolbarMode = "minimal"
