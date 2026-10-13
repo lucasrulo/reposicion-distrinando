@@ -3,6 +3,8 @@ Distrinando | Centro de Reposición
 Venta por Modelo+Color → SKU, velocidad, cobertura, alertas y plan de reposición.
 Lee los datos que deja el extractor (GitHub Actions) en la rama `data` del repo.
 """
+import hashlib
+import hmac
 import io
 import json
 import os
@@ -115,13 +117,61 @@ def calcular(ventas, stock, hist, ubicaciones, estados, params_json, hoy):
     return v, h, d, m
 
 
+# ==============================================================================
+# LOGIN (usuarios y hashes en st.secrets -> [usuarios], nunca en el código)
+# ==============================================================================
+def _hash(p: str) -> str:
+    return hashlib.sha256(p.encode("utf-8")).hexdigest()
+
+
+def login():
+    if st.session_state.get("usuario"):
+        return
+    try:
+        usuarios = {k.lower(): v for k, v in dict(st.secrets.get("usuarios", {})).items()}
+    except Exception:
+        usuarios = {}
+    if not usuarios:
+        st.error("Falta configurar la sección [usuarios] en los Secrets de Streamlit.")
+        st.stop()
+    _, c, _ = st.columns([1, 1.2, 1])
+    with c:
+        st.markdown("<div style='height:8vh'></div>", unsafe_allow_html=True)
+        st.markdown("## 📦 Centro de Reposición")
+        st.caption("Distrinando · acceso restringido")
+        with st.form("login"):
+            u = st.text_input("Usuario").strip().lower()
+            p = st.text_input("Contraseña", type="password")
+            ok = st.form_submit_button("Ingresar", type="primary", width="stretch")
+        if ok:
+            h = usuarios.get(u)
+            if h and hmac.compare_digest(str(h), _hash(p)):
+                st.session_state["usuario"] = u
+                st.rerun()
+            st.error("Usuario o contraseña incorrectos")
+    st.stop()
+
+
+login()
+st.sidebar.markdown(f"👤 **{st.session_state['usuario']}**")
+if st.sidebar.button("Cerrar sesión", width="stretch"):
+    st.session_state.pop("usuario", None)
+    st.rerun()
+
 if st.sidebar.button("🔄 Refrescar datos ahora", width="stretch"):
     st.cache_data.clear()
 
 try:
     ventas_raw, stock_raw, hist_raw, meta = cargar()
 except Exception as e:
-    st.error(f"No se pudieron cargar los datos: {e}")
+    if "404" in str(e):
+        st.info("⏳ **Todavía no hay datos.** El workflow de GitHub Actions no publicó la rama `data` "
+                "(no corrió todavía o falló).\n\n"
+                "Revisalo en **GitHub → Actions → Sync stock y ventas**. Cuando termine en verde, "
+                "tocá **🔄 Refrescar datos ahora**.")
+        st.caption(f"Detalle técnico: {e}")
+    else:
+        st.error(f"No se pudieron cargar los datos: {e}")
     st.stop()
 
 # ==============================================================================
