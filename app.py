@@ -182,8 +182,9 @@ sb.title("📦 Reposición")
 marcas_all = sorted(stock_raw["marca"].dropna().unique())
 marcas = sb.multiselect("Marcas", marcas_all, default=marcas_all)
 ubic_all = sorted(stock_raw["ubicacion"].dropna().unique())
-ubicaciones = sb.multiselect("Ubicaciones que cuentan como stock", ubic_all, default=ubic_all,
-                             help="Ej.: sacá ubicaciones de tránsito o de devoluciones")
+ubicaciones = (sb.multiselect("Ubicaciones que cuentan como stock", ubic_all, default=ubic_all,
+                              help="Ej.: sacá ubicaciones de tránsito o de devoluciones")
+               if len(ubic_all) > 1 else ubic_all)
 estados = sb.multiselect("Estado del producto", ["ACTIVE", "UNLISTED", "DRAFT", "ARCHIVED"], default=["ACTIVE", "UNLISTED"])
 
 sb.markdown("### Parámetros de reposición")
